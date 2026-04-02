@@ -716,7 +716,8 @@ class OrderActionType(Enum):
     """Types of order actions a strategy can return."""
     SUBMIT = "SUBMIT"          # Place a new order
     CANCEL = "CANCEL"          # Cancel a resting order by ID
-    AMEND = "AMEND"            # Modify price/size of a resting order
+    # Note: AMEND is not supported. Polymarket has no atomic amend.
+    # To modify an order, CANCEL then SUBMIT (cancel-and-replace pattern).
 
 
 class TokenSide(Enum):
@@ -738,7 +739,6 @@ class OrderAction:
 
     For SUBMIT: all fields except cancel_order_id are required.
     For CANCEL: only cancel_order_id is required.
-    For AMEND: cancel_order_id + new price/size.
     """
     action_type: OrderActionType
     strike: int = 0
@@ -1189,8 +1189,7 @@ For each event at timestamp T:
   7. Collect OrderActions from callback return
   8. Process actions:
      a. All CANCELs first
-     b. All AMENDs second
-     c. All SUBMITs last
+     b. All SUBMITs second
   9. Apply latency to new orders (become active at T + latency)
   10. Log to audit journal
 ```

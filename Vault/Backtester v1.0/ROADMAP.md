@@ -113,7 +113,7 @@ More precisely:
 
 **Scope:** Build robust, idempotent download scripts for both data sources. ThetaData tick-level NBBO quotes and EOD Greeks/OI for all target tickers and filtered option contracts. Telonex `book_snapshot_full` and `trades` channels for all target Polymarket markets. Smart filtering keeps data volume manageable: strikes within 20% of ATM, expiries within 30 DTE. All output is sorted Parquet with consistent partitioning by date and entity. This phase extends the existing `Code/scripts/download_options.py` with new commands rather than building from scratch.
 
-**Key decisions:** Snappy compression for fast decompression during backtest runs. One Parquet file per (ticker, expiry) for ThetaData and per (market_slug, date) for Telonex. The `market_registry.parquet` mapping Polymarket markets to (ticker, strike, expiry) is built from Telonex market metadata.
+**Key decisions:** zstd compression for ThetaData downloads (better ratio for large tick-level files); Snappy for Telonex data (native SDK output) and aligned event streams (fast decompression). One Parquet file per (ticker, expiry) for ThetaData and per (market_slug, date) for Telonex. The `market_registry.parquet` mapping Polymarket markets to (ticker, strike, expiry) is built from Telonex market metadata.
 
 **Risks:** ThetaData rate limits on Standard tier (4 concurrent requests) may make full-universe downloads slow. Telonex API availability and data completeness for less-liquid markets. Mitigation: incremental downloads with checkpoint tracking; data quality reports generated per download batch.
 

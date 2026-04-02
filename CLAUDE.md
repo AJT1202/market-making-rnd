@@ -23,7 +23,7 @@ Use these before making assumptions about API behavior or data availability.
 
 ## Target Tickers
 
-AAPL, MSFT, GOOGL, AMZN, META, NVDA, TSLA, NFLX, PLTR, SPX, NDX
+AAPL, MSFT, GOOGL, AMZN, META, NVDA, TSLA, NFLX, PLTR, SPX, NDX (excluded from v1.0 — ThetaData lacks NDX index price data)
 
 ## Directory Structure
 

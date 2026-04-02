@@ -13,10 +13,10 @@ tags:
   - pnl-decomposition
   - adverse-selection
 depends_on:
-  - Phase 1 (Data Pipeline)
-  - Phase 2 (Order Matching Engine)
-  - Phase 3 (Fill Simulation)
-  - Phase 4 (Fair Value Integration)
+  - Phase 1 (Data Acquisition Pipeline)
+  - Phase 2 (Data Alignment & DataProvider)
+  - Phase 3 (Core Backtesting Engine)
+  - Phase 4 (Fair Value & Strategy Interface)
 related:
   - "[[Performance-Metrics-and-Pitfalls]]"
   - "[[NVDA-POC-Results]]"
@@ -144,28 +144,38 @@ If SELL:  adverse_selection_i = min(0, (mid_t - mid_{t+horizon}) * size)
 Total Adverse Selection = SUM(adverse_selection_i) for all fills
 ```
 
-The `min(0, ...)` clamp ensures adverse selection is always non-positive: we count losses from price moving against us but do not credit "favorable selection" because that conflates with spread capture.
+The `min(0, ...)` clamp ensures adverse selection is always non-positive in the **decomposition**: we count losses from price moving against us but do not credit "favorable selection" because that conflates with spread capture.
+
+> [!important] Two AS Conventions
+> **Decomposition AS** (this section): Clamped via `min(0, ...)`. Always ≤ 0. Used in the P&L identity so the components sum correctly.
+> **Glosten-Harris AS** (Section 3): Unclamped signed values. Can be positive (favorable) or negative (adverse). Used for flow analysis and toxicity measurement.
+> These are **different numbers by design**. The decomposition AS is a strict subset of the Glosten-Harris AS (it excludes favorable fills). Do not expect them to match.
 
 **Inventory P&L** (continuous mark-to-market):
 
 ```
-inventory_pnl = SUM over t: net_position_t * (mid_{t+1} - mid_t)
+inventory_pnl = SUM over t (up to T_last): net_position_t * (mid_{t+1} - mid_t)
 ```
 
 Where `net_position_t` = YES position minus NO position (net directional exposure) and `mid_t` is the Polymarket midpoint at time step $t$. This captures the mark-to-market gain or loss from holding inventory as the market moves, independent of any fills.
+
+> [!important] Boundary: Inventory P&L Stops Before Resolution
+> `T_last` is the **last timestamp before the resolution event**. The inventory P&L accumulates MTM through normal trading but does NOT include the jump from `last_mid` to `settlement_price`. That jump belongs to Resolution P&L. This prevents double-counting.
 
 **Resolution P&L** (terminal):
 
 ```
 For each strike k:
-  If resolved YES: resolution_pnl_k = net_yes_position_k * $1.00
-  If resolved NO:  resolution_pnl_k = net_no_position_k * $1.00
-  (the complementary token resolves to $0.00)
+  resolution_pnl_k = net_position_k * (settlement_price_k - last_mid_k)
 
-Total Resolution PnL = SUM(resolution_pnl_k) + accumulated_cash_from_fills
+Where:
+  settlement_price = $1.00 if resolved YES, $0.00 if resolved NO
+  last_mid_k = Polymarket midpoint at T_last (last timestamp before resolution)
+
+Total Resolution PnL = SUM(resolution_pnl_k)
 ```
 
-In practice, resolution PnL is the difference between the settlement value and the mark-to-market value of the position just before resolution. For a market maker, a large resolution PnL (positive or negative) indicates the strategy is taking directional risk that dwarfs spread capture -- the key warning from [[NVDA-POC-Results]] where the $165 strike had -$50 resolution loss against only $21.40 cash from trading.
+Resolution P&L captures **only the gap between the last known market price and the binary settlement**. It is the difference between the settlement value and the mark-to-market value of the position just before resolution. For a market maker, a large resolution PnL (positive or negative) indicates the strategy is taking directional risk that dwarfs spread capture -- the key warning from [[NVDA-POC-Results]] where the $165 strike had -$50 resolution loss against only $21.40 cash from trading.
 
 **Fees:**
 
@@ -1017,6 +1027,51 @@ When running strategy A vs strategy B on the same data:
 
 **Depends on:** All tasks 5.1-5.9
 
+### Task 5.11: Statistical Validation (M6 fix)
+
+**Files:** `bt_engine/analytics/statistical_validation.py`
+
+Implement the statistical rigor framework from [[Performance-Metrics-and-Pitfalls]] Sections 4.1-4.3:
+
+1. **Walk-Forward Validation**: Split backtest period into train/test windows. Optimize strategy parameters on train, evaluate on test. Report in-sample vs out-of-sample Sharpe, drawdown, fill rate.
+2. **Monte Carlo Trade Shuffle**: Randomly permute trade timestamps (preserving fill distribution) to test whether P&L depends on trade ordering or is robust. Run 1000 shuffles, report p-value.
+3. **Bootstrap Confidence Intervals**: For all key metrics (Sharpe, total P&L, AS ratio), compute 95% CI via bootstrap resampling of daily P&L.
+4. **Minimum Sample Size Check**: Warn if fewer fills than the minimum required for statistical significance (per Section 4.4 of Performance-Metrics-and-Pitfalls).
+
+All reported metrics in the summary report must include 95% confidence intervals.
+
+**Depends on:** 5.1, 5.2, 5.3
+
+### Task 5.12: B-L Probability Accuracy Test (M7 fix)
+
+**Files:** `tests/test_bl_accuracy.py`
+
+Add Test 6.8: **B-L Probability Accuracy**. Using NVDA March 30 data with known outcomes (5 strikes, each resolves YES or NO):
+1. Compute B-L probabilities at 5-minute intervals throughout the trading day
+2. Assert: Brier score < 0.25 across all strikes
+3. Assert: calibration gap < 0.15 in [0-0.2, 0.2-0.4, 0.4-0.6, 0.6-0.8, 0.8-1.0] bins
+4. Plot calibration curve (predicted probability vs observed frequency)
+
+This validates the core thesis — that B-L probabilities are meaningful.
+
+**Depends on:** Phase 4 B-L pipeline
+
+### Task 5.13: Error Case and Edge-of-Day Tests (M8 fix)
+
+**Files:** `tests/test_error_cases.py`
+
+Add Tests 6.9 and 6.10:
+
+**Test 6.9: Degraded Data Handling**
+- Synthetic scenario with: (a) a timestamp where B-L returns None — verify engine uses last valid fair value, (b) empty book snapshot — verify metrics handle missing midpoints gracefully (null, not NaN propagation), (c) DataProvider returning DEGRADED quality — verify spread is widened or quotes pulled
+- Pass criteria: no crashes, no NaN in output CSVs, degraded timestamps logged
+
+**Test 6.10: Edge-of-Day Adverse Selection**
+- Fills in the last 5 minutes of trading where t+5min and t+60min midpoints don't exist (market closed/resolved)
+- Pass criteria: AS fields for unavailable horizons are null/sentinel, not computed from garbage. Decomposition still balances.
+
+**Depends on:** 5.2, 5.9
+
 ---
 
 ## 10. Acceptance Criteria
@@ -1030,7 +1085,8 @@ Phase 5 is complete when:
 5. **Audit Trail**: Every order, fill, fair value update, and book state change is logged to the journal with full context
 6. **No-Lookahead**: Post-hoc audit confirms zero timestamp violations
 7. **NVDA Replay**: v1.0 engine reproduces POC results within tolerance (Section 6.1 criteria)
-8. **Validation Tests**: All 7 test cases pass
+8. **Validation Tests**: All 10 test cases pass (7 original + B-L accuracy + degraded data + edge-of-day)
+9. **Statistical Validation**: All reported metrics include 95% confidence intervals via bootstrap. Walk-forward out-of-sample Sharpe reported.
 9. **Output Files**: All CSV/Parquet files are produced with correct schemas
 10. **Report**: Summary report is generated with all sections populated, red flags identified
 

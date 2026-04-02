@@ -725,9 +725,15 @@ These production modules are battle-tested and transfer without modification:
 | `internal_queue.py` | `bt_engine/engine/internal_queue.py` | bisect-based internal event scheduling |
 | `schema.py` | `bt_engine/data/schema.py` | BookSnapshot (numpy view), TradeEvent, UnderlyingPrice, TimelineEvent |
 | `store.py` | `bt_engine/data/store.py` | DataStore container with latest-snapshot index |
-| `interface.py` | `bt_engine/strategy/interface.py` | Strategy protocol, StrategyAction, StrategyUpdate |
+### 8.2 Adapt (Modify for Phase 3/4)
 
-### 8.2 Adapt (Modify for Phase 3)
+> [!important] Strategy Interface Migration
+> `bt_engine/strategy/interface.py` is an ADAPT target, not reuse-directly. Phase 3 builds against the existing per-strike `on_market_update(StrategyUpdate)` Protocol for initial development. **Phase 4 replaces it** with a new ABC delivering all-strikes-at-once via `on_book_update(dict[int, MarketSnapshot])` — see [[Phase-4-Fair-Value-Strategy]] Section 5.2. This is a planned breaking change. Phase 3 integration tests should use the existing interface; Phase 4 migrates all strategies to the new ABC and refactors the engine loop to batch updates across strikes.
+
+| File | Path | Adaptation needed |
+|------|------|-------------------|
+| `interface.py` | `bt_engine/strategy/interface.py` | Phase 3: use as-is. Phase 4: replace with new ABC (5 callbacks, all-strikes delivery) |
+| `adapter.py` | `bt_engine/data/adapter.py` | **NEW** (M4 fix): Convert Phase 2 DataProvider float types to engine integer ticks (`round(price * 100)` for ticks, `round(size * 100)` for centishares) |
 
 | Module | Path | Changes Needed |
 |--------|------|----------------|
