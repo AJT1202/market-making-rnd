@@ -1,0 +1,18 @@
+# Backtester v1.0 Configuration
+# Adjust per machine — this is the only file that changes between environments.
+
+[paths]
+# Root directory for all downloaded data (Telonex + ThetaData)
+# macOS example: "/Volumes/SSD/polymarket-data"
+# Windows example: "E:\\polymarket-data"
+data_dir = "/Volumes/SSD/polymarket-data"
+
+[thetadata]
+# ThetaData terminal base URL (same on all platforms)
+base_url = "http://127.0.0.1:25503/v3"
+# Max concurrent requests (STANDARD tier = 4)
+concurrency = 4
+
+[backtester]
+# Timestamp convention: all internal timestamps in UTC microseconds
+timezone = "US/Eastern"

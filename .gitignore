@@ -1,0 +1,28 @@
+# Secrets
+Vault/Secrets.md
+creds.txt
+
+# Data (too large for git, lives on external SSD)
+Code/data/
+*.parquet
+
+# OS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# Obsidian
+Vault/.obsidian/workspace.json
+Vault/.obsidian/workspace-mobile.json
+
+# OMC state
+.omc/
+
+# Telonex testing output
+Code/Telonex testing/output/
+Code/Telonex testing/data/
+Code/Telonex testing/datasets/
