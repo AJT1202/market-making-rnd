@@ -1,0 +1,21 @@
+# Backtester v1.0 Configuration
+# Copy this file to config.toml and fill in your values.
+# config.toml is gitignored — never commit secrets.
+
+[paths]
+# Root directory for all downloaded data
+# macOS: "/Volumes/SSD/polymarket-data"
+# Windows: "D:/data"
+data_dir = ""
+
+[thetadata]
+base_url = "http://127.0.0.1:25503/v3"
+concurrency = 4
+
+[telonex]
+# Get your API key from https://telonex.io (requires Plus subscription)
+# Can also be set via TELONEX_API_KEY environment variable
+api_key = ""
+
+[backtester]
+timezone = "US/Eastern"
